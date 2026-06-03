@@ -1,0 +1,94 @@
+---
+name: fullstack-flow/phases/plan
+description: "实施计划：读取规格文档，分解为 T### [P] 标准化任务清单，标注 AC 覆盖和依赖关系。只读模式。"
+version: 2.1.0
+tags: [fullstack, codebuddy-only, spec-driven, read-only]
+role: codebuddy-planner
+model: deepseek-v4-flash
+tools: [Read, Grep, Agent]
+references:
+  - ../references/spec-driven-development.md
+---
+
+# Phase 4: 实施计划
+
+> 在写代码前，将规格分解为可执行的任务清单。
+
+## 职责
+
+**输入**：规格文档（`docs/规格文档/`）  
+**输出**：`docs/实施计划/YYYY-MM-DD-{功能简述}.md`  
+**模式**：只读（不写代码）
+
+## 流程
+
+### Step 0: 读取工作流状态
+
+1. Read `.codebuddy/workflow/state.yaml`，验证 `phase.current == "plan"`
+2. 验证前置制品存在：`artifacts.spec.path` 对应的文件存在
+3. 设置 `phase.status = "in_progress"`, `phase.started_at = 当前时间`
+
+### Step 1: 定位并理解规格文档
+
+提取修改目标、影响范围文件、验收标准。
+
+### Step 2: 任务分解
+
+格式：`T### [P] {任务描述} — \`path/to/File\`  [AC01, AC02]`
+
+分解原则：
+1. **原子性** — 一个任务只做一件事
+2. **可验证** — 完成后有明确验证方式
+3. **有依赖** — 标注前后关系
+4. **有 AC 映射** — 每个任务标注覆盖的 AC 编号
+
+### Step 3: 排序 + 风险评估
+
+排序：后端先行、风险先行、独立先行。评估是否涉及公共组件、多模块影响、DB 变更。
+
+## 输出模板
+
+```
+# 实施计划：{功能简述}
+## 基本信息（日期、关联规格文档）
+## 任务清单
+| ID | 任务 | 类型 | 依赖 | 文件 | AC 覆盖 | 预估 |
+|----|------|------|------|------|---------|------|
+| T001 [P] | {描述} | 后端 | - | `path/File.java` | AC01 | 10min |
+## 实施顺序
+### 步骤 1: T001 — {描述}
+- **操作**: {具体做什么}  **验证**: {确认方式}  **文件**: {路径}  **依赖**: T000
+## 风险评估
+| 风险 | 级别 | 影响 | 应对 |
+## AC 覆盖验证
+| AC | 覆盖任务 | 状态 |
+| AC01 | T001 | ✅ |
+```
+
+### Step 4: 更新实施计划索引
+
+在 `docs/实施计划/INDEX.md` 表**顶部**插入新行。
+
+### Phase 出口
+
+1. 如有设计决策被用户确认，创建 `decisions/YYYY-MM-DD-{简述}.md`，更新 `decisions[]` 数组
+2. 更新 `artifacts.plan.path`, `artifacts.plan.updated_at`
+3. Phase 出口：
+   - `phase.status = "completed"`, `phase.completed_at = 当前时间`
+   - `progress.phases_completed.append("plan")`
+   - `phase.current = "coverage-check"`, `phase.status = "pending"`
+   - `metrics_snapshot.phase_durations[plan] = 耗时分钟数`
+4. 更新 `session.last_activity = 当前时间`
+
+## 自检
+
+- [ ] 每任务一个职责（原子性）
+- [ ] 任务编号从 T001 递增
+- [ ] [P] 标记的任务确实可并行（不同文件、无依赖）
+- [ ] 所有 AC 被任务 100% 覆盖
+- [ ] 单任务预估 ≤ 30 分钟
+- [ ] 依赖关系正确（无循环依赖）
+
+## 约束
+
+- 绝不写代码。不做技术选型。标注依赖关系。每任务 ≤ 30 分钟。
