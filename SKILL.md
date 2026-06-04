@@ -72,7 +72,7 @@ CodeBuddy 收到任务后先执行 Phase 1 描述澄清，不依赖任何外部�
 
 1. **Phase 1** 必须执行描述澄清，提取 ≥3 个关键词方可进入 Phase 2
 2. **Phase 2** 必须使用 MCP 工具链自行探路，生成 `docs/探路报告/`，不得跳过
-3. **Phase 2 探路涉及 DB 时必做数据采样**：使用 `codegraph` 定位 Controller 层 API 接口，获取 VO/DTO 字段结构反映业务数据视图；使用 `mysql-archive.execute_query` 查询真实数据行（正常流程+边界DISTINCT）；对照表字段与 VO 字段记录映射关系。追踪数据写入链路，输出到探路报告 L4、L4.5 和测试数据样例章节
+3. **Phase 2 探路涉及 DB 时必做数据采样**：使用 `codegraph` 定位 Controller 层 API 接口，获取 VO/DTO 字段结构反映业务数据视图；使用 `mysql-{子项目名}.execute_query` 查询真实数据行（正常流程+边界DISTINCT）；对照表字段与 VO 字段记录映射关系。追踪数据写入链路，输出到探路报告 L4、L4.5 和测试数据样例章节
 4. **Phase 2.5** 质量门控必须执行，通过率 100% 方可进入 Phase 3
 5. **Phase 3** 必须读取探路报告，输出 What/Goal/Scope/AC
 6. **Phase 4** 必须输出 T### [P] 标准化任务清单，每任务标注 AC
@@ -96,9 +96,9 @@ CodeBuddy 收到任务后先执行 Phase 1 描述澄清，不依赖任何外部�
 24. **每个 Phase 入口必须读取 `.codebuddy/workflow/state.yaml`**，确认当前阶段状态正确，如检测到未完成的工作流则进入恢复模式
 25. **每个 Phase 出口必须更新 `.codebuddy/workflow/state.yaml`**，写入制品路径和门控结果，设置下一阶段为 pending
 26. **Phase 3/4 有设计决策时必须记录到 `decisions/`**：用户明确选择 / Agent 推荐替代方案 / 新增设计模式时强制记录
-27. **Phase 6.7 复盘时同步 Memory**：复盘五维分析中涉及项目惯例/流程改进/技术沉淀的，自动写入 `C:\Users\User\.codebuddy\projects\d-AiProjects-archive\memory\` 并更新 MEMORY.md
+27. **Phase 6.7 复盘时同步 Memory**：复盘五维分析中涉及项目惯例/流程改进/技术沉淀的，由 CodeBuddy 自动写入项目对应的 Memory 目录并更新 MEMORY.md
 28. **state.yaml 禁止手动编辑**，只能通过 Phase 入口/出口协议自动更新
-29. **Phase 1/3 交互式 Q&A 必须验证用户回答**：用户提供的模块名、页面路径、方法名、表名等具象信息，CodeBuddy 必须使用 Read/Grep/codegraph/mysql-archive 等工具在 1 轮内验证其真实性。验证失败时标注"(待验证)"并继续追问核实，不得直接采信无法验证的用户陈述。
+29. **Phase 1/3 交互式 Q&A 必须验证用户回答**：用户提供的模块名、页面路径、方法名、表名等具象信息，CodeBuddy 必须使用 Read/Grep/codegraph 等工具在 1 轮内验证其真实性。验证失败时标注"(待验证)"并继续追问核实，不得直接采信无法验证的用户陈述。
 30. **验证发现问题必须回退对应 Phase**：用户/测试人员在任意阶段（含 Phase 6 完成后）发现问题，按类型回退到对应阶段重新执行并更新制品，完成后重新走后续所有 Phase，不得在流程外做 ad-hoc 修复。判定规则：
     - 代码逻辑错误 → 回退 Phase 5（代码修改），重走 Phase 5.5 → Phase 6
     - 方案设计缺陷 → 回退 Phase 4（实施计划），重走 Phase 4.5 → Phase 5 → Phase 5.5 → Phase 6

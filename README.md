@@ -60,14 +60,17 @@ CodeBuddy 将加载技能并启动 Phase 1（描述澄清），引导你完成�
 │   ├── codegraph-reference.md
 │   └── ...
 ├── change-record/         # 子技能: 修改记录生成
+│   └── java-standards/    # 子技能: Java 编码规范
 ├── code-explore/          # 子技能: 代码探路
-└── java-standards/        # 子技能: 编码规范
+├── onboard-project/       # 子技能: 项目初始化
+├── audit-flow/            # 子技能: 流程审计
+└── vue-standards/         # 子技能: Vue 编码规范
 ```
 
 ## 依赖
 
 - CodeBuddy Code CLI
-- MCP 服务：`codegraph`（代码分析）、`mysql-archive`（数据库）、`api-fetcher`（API 调用）
+- MCP 服务：`codegraph`（代码分析）、`mysql-{子项目名}`（数据库）、`api-fetcher`（API 调用）
 - 项目需要符合 Vue3 + Spring Boot 技术栈
 
 ## 版本

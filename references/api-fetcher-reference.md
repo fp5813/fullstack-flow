@@ -57,7 +57,7 @@ api-fetcher 会自动将登录获取的 JWT token 缓存到本地文件 `token-c
 ```
 api_login
 ```
-默认使用 `admin / archive@System#2026`，也可通过参数自定义。
+默认使用预配置的凭据（请参考项目 `.mcp.json` 中 api-fetcher 对应的登录端配置），也可通过参数自定义。
 
 返回值示例：
 ```json
@@ -113,7 +113,7 @@ api_list path="/system/xxx/list" headers={"X-Access-Token":"手动指定token"}
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
-| `--base-url` | `http://127.0.0.1:8081/archive` | 后端基础 URL |
+| `--base-url` | `http://127.0.0.1:8080/{context-path}` | 后端基础 URL |
 | `--use-mlogin` | 未设置 | 使用 `/sys/mLogin` 免验证码登录（推荐） |
 | `--token-cache-path` | `mcp-servers/api-fetcher/token-cache.json` | token 缓存文件路径 |
 
@@ -122,13 +122,12 @@ api_list path="/system/xxx/list" headers={"X-Access-Token":"手动指定token"}
 ```json
 {
   "mcpServers": {
-    "api-fetcher": {
+    "api-fetcher-{子项目}": {
       "args": [
-        "--base-url=http://127.0.0.1:8081/archive"
+        "--base-url=http://127.0.0.1:8080/{context-path}"
       ],
       "command": "node",
-      "type": "stdio",
-      "cwd": "mcp-servers/api-fetcher"
+      "type": "stdio"
     }
   }
 }
