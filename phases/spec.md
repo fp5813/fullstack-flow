@@ -1,7 +1,7 @@
 ---
 name: fullstack-flow/phases/spec
 description: "规格澄清：读取探路报告，交互式澄清模糊点（≤5问题/轮），输出 What/Goal/Scope/AC 到规格文档。只读模式。"
-version: 2.1.0
+version: 2.2.0
 tags: [fullstack, codebuddy-only, spec-driven, read-only]
 role: codebuddy-specifier
 model: deepseek-v4-flash
@@ -14,6 +14,16 @@ references:
 
 > "先说清楚'做什么 + 为什么'，再动手'怎么做'" — 参见 spec-driven-development.md。
 
+## 快速概览
+
+```
+Step 0 读取状态 → Step 1 加载探路报告 → Step 2 Q&A 澄清（≤5问题/轮）
+  → Step 3 输出规格文档（What/Goal/Scope/AC + 方案设计与验证策略）
+  → Phase 出口 → plan
+```
+
+**核心**: What/Goal/Scope/AC 四要素 + 方案设计与验证策略 + 交互式澄清
+
 ## 职责
 
 **输入**：探路报告（`docs/探路报告/`）  
@@ -22,11 +32,10 @@ references:
 
 ## 流程
 
-### Step 0: 读取工作流状态
+### Step 0: 入口（Read `scripts/phase-entry-exit.md` 入口流程）
 
-1. Read `.codebuddy/workflow/state.yaml`，验证 `phase.current == "spec"`
-2. 验证前置制品存在：`artifacts.probe_report.path` 对应的文件存在，`artifacts.gate_2_5.status == "passed"`
-3. 设置 `phase.status = "in_progress"`, `phase.started_at = 当前时间`
+- parameters: current_phase="spec", next_phase="plan"
+- 额外：验证前置制品 `artifacts.probe_report.path` 存在且 `artifacts.gate_2_5.status == "passed"`
 
 ### Step 0a: 读取探路报告文件（优先于上下文记忆）
 
@@ -47,7 +56,7 @@ Read docs/探路报告/YYYY-MM-DD-{简述}.md      # 读取完整报告内容
 
 1. **What** — 现象？根因？（引用行号）触发条件？
 2. **Goal** — 修复后效果？验收标准？
-3. **Scope** — 直接修改文件？关联影响？**明确不在范围内的部分**
+3. **Scope** — 直接修改文件？关联影响？**明确不在范围内的部分**（参考 `references/out-of-scope.md` 中的决定不做清单，确保不越界操作）
 4. **AC** — 编号（AC01, AC02...），可验证的描述
 
 ### Step 2.5: 交互式澄清（遇模糊点时触发）
@@ -105,38 +114,95 @@ SELECT * FROM {表名} WHERE {条件} LIMIT 3;
 -- 边界值
 SELECT DISTINCT {状态字段} FROM {表名};
 ```
+## 方案设计与验证策略
+### 方案概述
+{描述本次选择的实现方案及其理由}
+
+### 条件分支矩阵
+| 条件 | 处理方式 | 涉及数据 | 验证方法 |
+|------|---------|---------|---------|
+| {条件 A（如 status=0）} | {处理方式} | {涉及的数据类型} | {验证方法} |
+| {条件 B（如 status=1）} | {处理方式} | {涉及的数据类型} | {验证方法} |
+| {异常/边界条件} | {处理方式} | {涉及的数据类型} | {验证方法} |
+
+> 条件分支矩阵列出所有可能的数据状态和处理路径，确保方案设计覆盖完整。
+> 每个条件列对应的"涉及数据"标注具体的字段类型和值域，"验证方法"标注对应的测试方式（API 调用/数据库查询/属性测试）。
+
+### 测试数据类型清单
+| 数据类型 | 来源 | 示例值 | 覆盖场景 |
+|---------|------|-------|---------|
+| {正常数据} | {API 创建 / 数据库查询} | {示例值} | 正常流程 |
+| {边界数据} | {API 创建} | {示例值} | 边界值验证 |
+| {异常数据} | {API 创建} | {示例值} | 异常流程 |
+| {状态/枚举数据} | {DISTINCT 查询} | {值域列表} | 枚举覆盖 |
+
+> 测试数据类型清单在 Phase 5 TDD 阶段作为测试数据准备的具体指导。
 ## 验收标准（AC）
 - [ ] AC01: {可验证描述}
 ## 澄清记录（如有交互）
 ## 假设（信息不足时）
 ```
 
-### Step 4: 更新规格文档索引
+### Step 4: 用户确认 Scope 和 AC
 
-在 `docs/规格文档/INDEX.md` 表**顶部**插入新行。
+规格文档生成后，向用户展示关键内容并请求确认：
 
-### Step 5: 更新工作流状态（Phase 出口）
+```markdown
+**请确认影响范围和验收标准：**
 
-1. 如有设计决策被用户确认，创建 `decisions/YYYY-MM-DD-{简述}.md`，更新 `decisions[]` 数组
+**影响范围（Scope）：**
+- 直接修改：{文件列表}
+- 关联影响：{关联模块}
+- 不在范围内：{明确排除项}
+
+**验收标准（AC）：**
+- [ ] AC01: {描述}
+- [ ] AC02: {描述}
+
+**业务流程修改点：**
+{要修改的业务流程描述}
+
+请逐项确认 (yes/no/修改建议)：
+```
+
+| 用户反馈 | 处理方式 |
+|---------|---------|
+| 全部通过 | 进入 Step 5 更新索引 |
+| 提出修改 | 更新规格文档对应章节，重新展示确认 |
+| Scope 变更 | 回退 Phase 2 补充探路，更新探路报告后再走 Phase 3 |
+
+> **核心原则**：所有修改代码前，必须经过用户确认影响范围和验收标准，Scope 变更必须回退补充探路。
+
+### Step 5: 更新规格文档索引（Read `scripts/update-index.md`）
+
+执行 prepend 模式：
+- index_path: "docs/规格文档/INDEX.md"
+- row_content: "| {日期} | [{简述}](./{文件名}) | {AC 数量} 条 AC |"
+
+### Step 6: 更新工作流状态（Phase 出口，Read `scripts/phase-entry-exit.md` 出口流程）
+
+1. 如有设计决策被用户确认，Read `scripts/create-decision.md` 创建决策日志
 2. 更新 `artifacts.spec.path`, `artifacts.spec.updated_at`
-3. Phase 出口：
-   - `phase.status = "completed"`, `phase.completed_at = 当前时间`
-   - `progress.phases_completed.append("spec")`
-   - `phase.current = "plan"`, `phase.status = "pending"`
-   - `metrics_snapshot.phase_durations[spec] = 耗时分钟数`
-4. 更新 `session.last_activity = 当前时间`
+3. 参数: current_phase="spec", next_phase="plan"
 
 ## 自检
 
 - [ ] 根因引用探路报告行号
 - [ ] Scope 边界明确（含不在范围内）
+- [ ] 不在范围项已明确记录（参考 `references/out-of-scope.md`）
 - [ ] AC 可验证、有编号（AC01...）
-- [ ] 不说 How（只聊 What/Why）
+- [ ] Scope 已获用户确认
+- [ ] AC 已获用户确认
 - [ ] 假设已记录
 - [ ] 涉及 DB 时数据来源章节完整，包含 API 接口数据（VO/DTO）、表结构、表↔VO 字段映射关系三部分
 - [ ] 测试数据引用探路报告中的采样结果
+- [ ] 方案设计已包含条件分支矩阵（覆盖所有数据状态和处理路径）
+- [ ] 测试数据类型清单已列出（含正常/边界/异常/枚举四类）
 - [ ] 用户关键选择已验证技术可行性（如有交互）
 
 ## 约束
 
 - 绝不写代码或做实现决策。所有根因引用探路报告行号。不知则标注"需补充探路"。
+- **用户确认前置**：Step 4 未获用户确认 Scope/AC 不得进入 Phase 4（计划）
+- **Scope 必须引用决定不做清单**：Step 2 的 Scope 定义必须参考 `references/out-of-scope.md`，确保不在范围项已明确记录。
+- **方案设计必须考虑测试验证**：Step 3 输出的规格文档必须包含"方案设计与验证策略"章节，明确条件分支矩阵和测试数据类型清单。条件分支矩阵覆盖所有数据状态和处理路径，测试数据类型清单覆盖正常/边界/异常/枚举四类数据。

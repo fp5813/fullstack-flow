@@ -1,7 +1,7 @@
 ---
 name: fullstack-flow/phases/rule-sync
 description: "业务规则同步：评估本次修改是否涉及业务规则，涉及则更新 docs/业务规则/ 并同步到 .codebuddy/rules/。"
-version: 3.1.0
+version: 3.2.0
 tags: [fullstack, codebuddy-only, rule-sync, documentation]
 role: codebuddy-recorder
 model: deepseek-v4-flash
@@ -13,6 +13,15 @@ references: []
 
 > 老项目需要持续沉淀业务规则，每次修改都是更新规则的机会。文档一致性核对已移至 Phase 5.5。
 
+## 快速概览
+
+```
+Step 0 读取状态 → Step 1 评估是否涉及规则 → Step 2 定位并更新规则文件
+  → Step 3 同步 .codebuddy/rules/ → Step 3.6 Instinct 捕获 → Phase 出口 → audit
+```
+
+**核心**: 业务规则更新 + 领域 Instinct 提取（常量/枚举/状态流转/权限/过滤/渲染）
+
 ## 职责
 
 **输入**：Phase 5 代码变更  
@@ -21,11 +30,10 @@ references: []
 
 ## 流程
 
-### Step 0: 读取工作流状态
+### Step 0: 入口（Read `scripts/phase-entry-exit.md` 入口流程）
 
-1. Read `.codebuddy/workflow/state.yaml`，验证 `phase.current == "rule-sync"`
-2. 验证前置制品存在：`artifacts.change_record.path` 对应的文件存在
-3. 设置 `phase.status = "in_progress"`, `phase.started_at = 当前时间`
+- parameters: current_phase="rule-sync", next_phase="audit"
+- 额外：验证前置制品 `artifacts.change_record.path` 存在
 
 ### Step 1: 评估是否涉及业务规则
 
@@ -57,9 +65,27 @@ alwaysApply: false
 - globs 精确到被影响的最小路径
 - `alwaysApply: false`，已存在文件用更新操作
 
-### Step 3.5: 更新业务规则索引
+### Step 3.5: 更新 INDEX（Read `scripts/update-index.md`）
+- prepend mode: 在 `docs/业务规则/INDEX.md` 表顶部插入新行
 
-如新增规则文件，在 `docs/业务规则/INDEX.md` 的"已归档模块"表中追加新模块行。
+### Step 3.6: Instinct 捕获
+
+> 业务规则往往是高价值的领域模式。在更新业务规则的同时，提取可复用的业务模式到 Instinct。
+
+**触发条件**：本次修改涉及业务规则变更时，检查以下场景：
+
+| 业务规则类型 | 领域 | 提取为 Instinct |
+|-------------|:----:|----------------|
+| 常量/枚举定义 | `数据` | 涉及业务常量枚举时，记录字段含义和取值约束 |
+| 状态流转规则 | `领域` | 涉及状态机/状态流转时，记录状态变迁路径 |
+| 权限注解约束 | `安全` | 涉及 `@RequiresPermissions` 时，记录权限命名模式和影响 |
+| 数据过滤规则 | `数据` | 涉及数据权限/过滤条件时，记录过滤实现模式 |
+| 前端条件渲染 | `UX` | 涉及 v-if/v-show 条件时，记录组件显隐的业务条件 |
+
+**执行步骤**：
+1. 对每个匹配的规则类型，生成 unique ID
+2. 按 `references/instinct-reference.md` 格式写入 instinct 文件
+3. 更新 `.codebuddy/instincts/INDEX.md`
 
 ### Step 4: 在修改记录中注明
 
@@ -82,12 +108,7 @@ alwaysApply: false
 
 - 只写规则文件，不修改源代码。有则可写，不强制。按模块组织，保持简洁。
 
-### Phase 出口
+### Phase 出口（Read `scripts/phase-entry-exit.md` 出口流程）
 
 1. 更新 `artifacts.rule_sync.status`, `artifacts.rule_sync.files_updated`（不涉及时设为 not_applicable）
-2. Phase 出口：
-   - `phase.status = "completed"`, `phase.completed_at = 当前时间`
-   - `progress.phases_completed.append("rule-sync")`
-   - `phase.current = "audit"`, `phase.status = "pending"`
-   - `metrics_snapshot.phase_durations[rule-sync] = 耗时分钟数`
-3. 更新 `session.last_activity = 当前时间`
+2. 参数: current_phase="rule-sync", next_phase="audit"

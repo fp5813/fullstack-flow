@@ -60,7 +60,9 @@ CodeBuddy 将加载技能并启动 Phase 1（描述澄清），引导你完成�
 │   ├── codegraph-reference.md
 │   └── ...
 ├── change-record/         # 子技能: 修改记录生成
-│   └── java-standards/    # 子技能: Java 编码规范
+├── java-dev-standards/    # 子技能: Java 开发规范
+├── java-review-standards/ # 子技能: Java 审查清单
+├── java-test-standards/   # 子技能: Java 测试规范
 ├── code-explore/          # 子技能: 代码探路
 ├── onboard-project/       # 子技能: 项目初始化
 ├── audit-flow/            # 子技能: 流程审计

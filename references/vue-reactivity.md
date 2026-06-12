@@ -1,5 +1,14 @@
 # Vue 3 Reactivity 最佳实践
 
+## 快速参考
+
+| 场景 | 推荐 | 避免 |
+|------|------|------|
+| 基础类型 | `ref` | `reactive` |
+| 派生数据 | `computed` | `watch` + 手动变量 |
+| 大型列表 | `shallowRef` | `ref`（深层代理开销） |
+| 解构 reactive | `toRefs` | 直接解构（丢失响应式） |
+
 ## 核心原则
 
 **最小源状态，派生数据用 computed，副作用用 watch。**

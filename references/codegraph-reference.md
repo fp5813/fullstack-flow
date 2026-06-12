@@ -4,6 +4,18 @@
 >
 > **首选工具：`codegraph_context`** — 一次调用完成"搜索 + 定位 + 关联符号 + 代码片段"全部任务。
 
+## 快速查阅
+
+| 场景 | 推荐命令 |
+|------|---------|
+| 综合代码上下文（首选） | `codegraph_context` |
+| 符号详情 + 调用链 | `codegraph_node` |
+| 搜索符号位置 | `codegraph_search` |
+| 两点间调用路径 | `codegraph_trace` |
+| 变更影响范围 | `codegraph_impact` |
+| 批量获取源码 | `codegraph_explore` |
+| 文件/目录浏览 | `codegraph_files` |
+
 ## 工具对照表
 
 | 场景 | 旧工具 (lexis/graphify) | **新工具 (codegraph)** |
@@ -222,7 +234,7 @@ Step 2: codegraph_node(symbol="关联符号")            ← 深入受影响节�
 
 | 配合工具 | 用途 | 调用时机 |
 |---------|------|---------|
-| `mysql-archive` | 直接查表结构/数据 | codegraph 定位到表后，用 mysql-archive 确认字段值域 |
+| `mysql-{子项目名}` | 直接查表结构/数据 | codegraph 定位到表后，用 mysql-{子项目名} 确认字段值域 |
 | `Read` | 精确验证行号和上下文 | codegraph 返回的位置信息需要精确确认时 |
 | `Agent` | 并行子代理探路 | 拆分探路任务并行执行，提升效率 |
 

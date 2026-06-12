@@ -3,6 +3,16 @@
 **技能路径**: `fullstack-flow/onboard-project`  
 **用途**: 当项目新增子项目时，自动创建对应的 MCP 服务和适配 fullstack-flow 流程
 
+## 快速参考
+
+| 步骤 | 产出 |
+|------|------|
+| 创建 MCP 配置 | codegraph / mysql / api-fetcher 各 1 条 |
+| 更新映射 | `mcp-tools-summary.md` 子项目表 |
+| 决策记录 | 记录接入信息 |
+
+> 触发: `/fullstack-flow/onboard-project` 或描述"接入新子项目"
+
 ## 使用方式
 
 在对话中输入 `/fullstack-flow/onboard-project` 或描述"接入新子项目"即可触发。

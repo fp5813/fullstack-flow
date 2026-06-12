@@ -1,7 +1,7 @@
 ---
 name: fullstack-flow/phases/clarify
 description: "描述澄清：探路前交互式 Q&A，确保可提取 ≥3 个具象关键词，避免模糊描述浪费探路资源"
-version: 1.1.0
+version: 2.0.0
 tags: [fullstack, codebuddy-only, clarify, read-only]
 role: codebuddy-clarifier
 model: deepseek-v4-flash
@@ -11,6 +11,15 @@ tools: [Read, Grep, Agent]
 # Phase 1: 描述澄清
 
 > 探路效果取决于输入质量。模糊的描述 → 浪费探路资源。花 2-5 个问题确保原料充足。
+
+## 快速概览
+
+```
+Step 0 初始化 → Step 0.5 环境预检 → Step 1 评估描述 → Step 2 交互澄清
+  → Step 2.5 验证回答 → Step 3 选择工作流模式 → Step 4 输出摘要 → Phase 出口
+```
+
+**核心**: 多轮 Q&A（≤5问题/轮）+ 用户信息验证 + 工作流模式推荐
 
 ## 职责
 
@@ -22,6 +31,9 @@ tools: [Read, Grep, Agent]
 
 ### Step 0: 初始化工作流状态
 
+> 入口协议执行 Read `scripts/phase-entry-exit.md` 入口流程。
+> (parameters: current_phase="clarify", next_phase="probe")
+
 1. 检查 `.codebuddy/workflow/state.yaml` 是否存在
 2. 如果不存在 → 按模板初始化（设置 `session.id`, `task.id` 为当前日期，`workflow.created_at`=当前时间）
 3. 如果存在且 `phase.status == in_progress` → 进入恢复模式：
@@ -29,6 +41,19 @@ tools: [Read, Grep, Agent]
    - 检查当前 Phase 的前置制品是否存在，缺失时询问用户
 4. 设置 `phase.current = "clarify"`, `phase.status = "in_progress"`
 5. 更新 `session.last_activity = 当前时间`
+
+### Step 0.5: 环境预检
+
+> Read `scripts/env-check.md` 并执行环境预检。
+> (parameters: project_type 根据项目自动判断, mcp_mysql_name="mysql-{子项目名}", mcp_codegraph_name="codegraph")
+| {项目名} | node ✅ / mvn ⚠️ / git ✅ | codegraph 已启用, mysql-{子项目名} 已启用 |
+```
+
+#### 0.5.4 检查流程
+
+- 工具链检查**不阻塞**流程，缺失时仅标注 ⚠️
+- MCP 检查**不阻塞**流程，缺失时标注 ⚠️ 并在报告中注明
+- 用户可在 Phase 2 开始前根据检查结果手动补充配置
 
 ### Step 1: 评估描述质量
 
@@ -67,7 +92,25 @@ tools: [Read, Grep, Agent]
 - **一轮连续验证**：用户一次回答中的多条信息，在同一回合内全部验证完，不拖到下一轮提问
 - 验证过程对用户透明，不打断对话节奏
 
-### Step 3: 输出澄清结果
+### Step 3: 选择工作流模式
+
+根据任务类型自动推荐工作流模式，用户可确认或修改：
+
+| 任务类型 | 推荐模式 | 理由 |
+|---------|---------|------|
+| `bug`（已知范围） | **classify** | 精准探路 + 定向修复 |
+| `feature`（新功能） | **distribute** | 多模块并行实现 |
+| `refactor`（重构） | **generate** | 多方案对比选最优 |
+| `optimization`（优化） | **adversarial** | 改一处 → 独立验证不影响其他 |
+| `complex`（复杂） | **distribute** | 拆解为并行子任务 |
+
+如果用户有明确偏好，可以手动指定：
+- "/workflow-pattern classify" 切换到分类模式
+- "/workflow-pattern distribute" 切换到分发模式
+
+模式信息写入 `state.yaml` 的 `workflow.pattern` 字段。
+
+### Step 4: 输出澄清结果
 
 ```
 ---
@@ -77,21 +120,45 @@ tools: [Read, Grep, Agent]
 澄清后描述：{可用于 codegraph_context 的完整描述}
 探路关键词：{≥3 个关键词}
 目标模块：{模块名}
+任务类型：{bug / feature / refactor / optimization / complex}
+推荐工作流模式：{classify / distribute / adversarial / generate}
 ---
 ```
 
-### Step 4: 更新工作流状态
+### Step 4.5: 用户确认澄清摘要
+
+输出澄清摘要后，向用户展示关键信息并请求确认：
+
+```markdown
+**请确认以下理解是否正确：**
+
+1. **任务类型**: {bug / feature / refactor}
+2. **目标模块**: {模块名}
+3. **影响范围**: {涉及的文件/模块列表}
+4. **业务修改点**: {要修改的业务流程描述}
+5. **关键词**: {≥3 个关键词}
+
+请确认 (yes/no)，如有偏差请补充说明。
+```
+
+| 用户反馈 | 处理方式 |
+|---------|---------|
+| "yes" / "y" / "确认" | 进入 Step 5 更新状态 |
+| "no" / 补充信息 | 回到 Step 2 交互式澄清，补充后重新输出摘要 |
+| 连续 3 轮仍不一致 | 输出当前理解并标注"(待验证)"，进入 Step 5 |
+
+> **核心原则**：所有修改代码前，必须经过用户确认业务流程修改点和影响范围，避免 Agent 理解偏差导致方向错误。
+
+### Step 5: 更新工作流状态
 
 1. 写入 state.yaml：
    - `task.brief`, `task.type`, `task.keywords`, `task.source` — 填入澄清结果
-   - `progress.current_step = "Step 3: 输出澄清结果"`
+   - `workflow.pattern` — 填入选择的工作流模式
+   - `progress.current_step = "Step 4: 输出澄清结果"`
    - `session.last_activity = 当前时间`
-2. Phase 出口：
-   - `phase.status = "completed"`, `phase.completed_at = 当前时间`
-   - `progress.phases_completed.append("clarify")`
-   - `phase.current = "probe"`, `phase.status = "pending"`
-   - `metrics_snapshot.phase_durations[clarify] = 耗时分钟数`
-   - `metrics_snapshot.total_duration_min = 累加值`
+2. Phase 出口（Read `scripts/phase-entry-exit.md` 出口流程）：
+   - parameters: current_phase="clarify", next_phase="probe"
+   - 额外记录：`metrics_snapshot.total_duration_min = 累加值`
 
 ## 持久化
 
@@ -99,15 +166,20 @@ Phase 1 输出（澄清摘要）通过对话传递给 Phase 2，Phase 2 生成�
 
 ## 自检
 
+- [ ] 环境预检已执行（工具链 + MCP 服务）
 - [ ] 澄清后 ≥3 个具象关键词
 - [ ] 模块/页面名已明确
 - [ ] BUG 有复现步骤/报错，功能有目标描述
 - [ ] 每轮提问 ≤ 5 个
 - [ ] 用户回答中的具象信息已验证（通过 Read/Grep/codegraph/mysql-{子项目名}）
+- [ ] 澄清摘要已获用户确认
 - [ ] 未讨论"怎么修"
+- [ ] 交互式 Q&A 已遵循 communication-rules 的 concise 级别
 
 ## 约束
 
 - 每轮最多 5 个问题，不足则基于已有信息探路并标注"(待验证)"
 - 不问"如何修改"和技术细节
 - 能 1 个问题问清楚的不问第 2 个
+- **用户确认前置**：Step 4.5 未获用户确认不得进入 Phase 2（探路）
+- **沟通规则**：交互式 Q&A 遵循 `references/communication-rules.md` 的 **concise 级别**（去填充词、去客套话、直奔问题本质）

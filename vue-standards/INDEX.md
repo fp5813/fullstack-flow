@@ -3,6 +3,15 @@
 **技能路径**: `fullstack-flow/vue-standards`  
 **用途**: Agent FE 在 Phase 5（编码）和 Phase 5.5（审核）时的规范参考
 
+## 快速参考
+
+| 章节 | 适用阶段 |
+|------|---------|
+| 架构约定 + 组件拆分 | Phase 4-5 |
+| 编码规范 + TDD 测试 | Phase 5 **必读** |
+| 审查清单（6 类 22 项） | Phase 5.5 **必读** |
+| References（reactivity/data-flow/composables/testing） | Phase 5 按需加载 |
+
 ## 核心内容
 
 | 章节 | 内容 | 适用阶段 |

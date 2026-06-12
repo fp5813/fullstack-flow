@@ -13,6 +13,15 @@ references: []
 
 > 修改记录模板详见 `docs/修改记录/TEMPLATE.md`。本文件仅说明与模板的差异点。
 
+## 快速概览
+
+```
+Step 0 读取状态 → Step 1 提取代码变更 → Step 2 生成修改记录（回滚方案）
+  → Step 3 复盘四问 → Step 4 更新索引 → Phase 出口
+```
+
+**核心**: 前后代码对比 + 手动回滚方案（禁止 git 命令）+ 复盘触发检查
+
 ## 职责
 
 **输入**：修改后的代码（Phase 5 产出）  
@@ -21,11 +30,10 @@ references: []
 
 ## 流程
 
-### Step -1: 读取工作流状态
+### Step -1: 入口（Read `scripts/phase-entry-exit.md` 入口流程）
 
-1. Read `.codebuddy/workflow/state.yaml`，验证 `phase.current == "record"`
-2. 验证前置制品存在：`artifacts.code_changes` 非空，`artifacts.gate_3.status == "passed"`
-3. 设置 `phase.status = "in_progress"`, `phase.started_at = 当前时间`
+- parameters: current_phase="record", next_phase="retrospect"
+- 额外：验证前置制品 `artifacts.code_changes` 非空且 `artifacts.gate_3.status == "passed"`
 
 ### Step 0: 上下文检查（可选）
 
@@ -64,13 +72,11 @@ Phase 6 生成的修改记录含完整代码 diff（20-40K tokens），是上下
 
 无验证循环时跳过此步。
 
-### Step 6: 更新修改记录索引
+### Step 6: 更新修改记录索引（Read `scripts/update-index.md`）
 
-在 `docs/修改记录/INDEX.md` 表**顶部**插入新行。格式：
-
-```
-| {日期} | [{简述}](./{文件名}) | {一行摘要} |
-```
+执行 prepend 模式：
+- index_path: "docs/修改记录/INDEX.md"
+- row_content: "| {日期} | [{简述}](./{文件名}) | {一行摘要} |"
 
 ### Step 7: 复盘触发检查（Phase 6.7 入口）
 
@@ -126,13 +132,8 @@ Phase 6 生成的修改记录含完整代码 diff（20-40K tokens），是上下
 
 - 绝不修改源文件。不使用 git 命令（用"定位行→替换"方式）。精确行号。
 
-### Phase 出口
+### Phase 出口（Read `scripts/phase-entry-exit.md` 出口流程）
 
 1. 更新 `artifacts.change_record.path`, `artifacts.change_record.updated_at`
-2. Phase 出口：
-   - `phase.status = "completed"`, `phase.completed_at = 当前时间`
-   - `progress.phases_completed.append("record")`
-   - 复盘触发时：`artifacts.retrospect.triggered = true`, `artifacts.retrospect.trigger_reason = "复盘四问触发"`, `phase.current = "retrospect"`, `phase.status = "pending"`
-   - 复盘未触发时：`phase.current = "rule-sync"`, `phase.status = "pending"`
-   - `metrics_snapshot.phase_durations[record] = 耗时分钟数`
-3. 更新 `session.last_activity = 当前时间`
+2. 参数: current_phase="record", next_phase="retrospect"（复盘触发时）/ "rule-sync"（未触发时）
+3. 额外：复盘触发时 `artifacts.retrospect.triggered = true`

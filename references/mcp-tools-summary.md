@@ -1,41 +1,23 @@
-# MCP 工具汇总
+---
+name: fullstack-flow/references/mcp-tools-summary
+description: "MCP 工具汇总（通用指引）— 命名模式、使用原则和优先级。项目级配置见 mcp-project-templates/"
+version: 2.1.0
+tags: [fullstack, mcp, reference, universal]
+---
 
-> 本项目（computility 算力平台）包含多个子项目，MCP 服务按子项目命名隔离。
-> 开发流程中涉及哪个子项目，就使用对应子项目的 MCP 服务。
+# MCP 工具汇总（通用指引）
 
-## 子项目 MCP 映射
+> 本文档记录 MCP 服务的通用使用原则和优先级。**项目级具体配置**请查阅 `mcp-project-templates/` 目录下的对应项目文件。
 
-### codegraph（代码结构分析）
+## 通用命名模式
 
-| MCP 服务名 | 扫描范围 | 默认状态 | 适用场景 |
-|-----------|---------|---------|---------|
-| `codegraph` | **全项目** computility 根目录 | ✅ 启用 | 跨模块调用链、框架→业务追踪 |
-| `codegraph-identity-check` | `identity-check/` | ✅ 启用 | identity-check 业务代码分析 |
-| `codegraph-framework` | `computility-framework/` | ⛔ 禁用 | 框架层代码开发 |
-| `codegraph-example-service` | `example-service/` | ⛔ 禁用 | 示例服务开发 |
-| `codegraph-example-simple` | `example-simple/` | ⛔ 禁用 | 综合示例开发 |
+| 服务类型 | 命名模式 | 用途 |
+|---------|---------|------|
+| codegraph | `codegraph` / `codegraph-{子项目名}` | 代码结构搜索/调用链/影响分析 |
+| mysql | `mysql-{子项目名}` | 数据库表结构和数据查询 |
+| api-fetcher | `api-fetcher-{子项目名}` | 后端 API 调用/数据采样 |
 
-### MySQL 数据库
-
-| MCP 服务名 | 数据库 | 默认状态 |
-|-----------|-------|---------|
-| `mysql-identity-check` | `10.229.0.116:15003/computility` | ✅ 启用 |
-| `mysql-example-simple` | `10.220.0.118:3306/outsource` | ⛔ 禁用 |
-
-### API Fetcher
-
-| MCP 服务名 | 后端地址 | 默认状态 |
-|-----------|---------|---------|
-| `api-fetcher-identity-check` | `localhost:8080/identity-check` | ✅ 启用 |
-| `api-fetcher-example-service` | `localhost:8081/service` | ⛔ 禁用 |
-| `api-fetcher-example-simple` | `localhost:8080/simple` | ⛔ 禁用 |
-
-### 其他
-
-| MCP 服务名 | 用途 | 默认状态 |
-|-----------|------|---------|
-| `Context7` | GitHub 官方文档检索 | ✅ 启用 |
-| `playwright` | 浏览器自动化（仅 macOS/Linux） | 按需 |
+> 命名模式在所有项目中保持一致，`{子项目名}` 替换为实际子模块名称。
 
 ## 使用原则
 
@@ -47,11 +29,32 @@
 ## 使用优先级
 
 1. **codegraph_context** — 首选，一次调用获取全部上下文
-2. **codegraph_node** — 深入关键符号 details + trail
+2. **codegraph_node** — 深入关键符号细节 + trail
 3. **api-fetcher-{subproject}** — 调用对应子项目的 API 获取真实响应数据
 4. **mysql-{subproject}** — 查对应数据库表结构
 
+## 项目级配置
+
+各项目的具体 MCP 服务清单、数据库地址和 API 地址在独立文件中维护：
+
+| 项目 | 文件 | 说明 |
+|------|------|------|
+| **通用模板（推荐）** | [mcp-project-templates/GENERIC.md](./mcp-project-templates/GENERIC.md) | **覆盖全栈/后端项目的标准化 MCP 配置，含命名规范、启停规则、安全凭证管理** |
+| moma（墨码） | [mcp-project-templates/moma.md](./mcp-project-templates/moma.md) | 纯后端单体项目，基于 GENERIC 模板生成 |
+| figma-html（HTML to Figma） | [mcp-project-templates/figma-html.md](./mcp-project-templates/figma-html.md) | 纯前端 Node/TypeScript 项目，GENERIC 矩阵中的"纯前端"类型 |
+| computility（算力平台） | [mcp-project-templates/computility.md](./mcp-project-templates/computility.md) | 含 5 个子模块的 MCP 配置 |
+| archive（档案管理系统） | [mcp-project-templates/archive.md](./mcp-project-templates/archive.md) | JeecgBoot 单体项目 MCP 配置 |
+| 新项目接入 | [mcp-project-templates/TEMPLATE.md](./mcp-project-templates/TEMPLATE.md) | 新项目 MCP 初始化模板 |
+
 ## 详细参考
 
+- [通用 MCP 配置模板](./mcp-project-templates/GENERIC.md) — **推荐所有新项目从此开始**
 - [codegraph 使用指南](./codegraph-reference.md)
 - [api-fetcher 使用指南](./api-fetcher-reference.md)
+
+## 变更记录
+
+| 版本 | 日期 | 变更 |
+|:----:|------|------|
+| 2.1.0 | 2026-06-12 | 新增通用 MCP 配置模板 GENERIC.md 引用 |
+| 2.0.0 | 2026-06-11 | 重构为通用指引+项目级配置分离 |

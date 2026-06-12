@@ -17,6 +17,16 @@ mcpServers: [mysql-{子项目名}, api-fetcher-{子项目名}]
 
 > 由 Phase 1 提供原料。使用 **codegraph** MCP 主力探路，并行子代理提升效率。
 
+## 快速概览
+
+```
+Step 0 读取状态 → Step 1 提取关键词 → Step 1.5 加载工作流模式
+  → Step 2 并行探路（4 Agent）→ Step 3 写入探路报告
+  → Step 4 质量门控（Phase 2.5）→ Phase 出口
+```
+
+**核心**: 4 并行 Agent（代码/DB+API/VO/文档）→ 结构化探路报告 L0-L5
+
 ## ⚡ 每日启动（开始开发前只做一次）
 
 每次开始开发前，确认 token 有效即可直接使用 `api-fetcher` 调用后端 API：
@@ -37,86 +47,64 @@ mcpServers: [mysql-{子项目名}, api-fetcher-{子项目名}]
 
 ## 流程
 
-### Step 0: 读取工作流状态
+### Step 0: 入口（Read `scripts/phase-entry-exit.md` 入口流程）
 
-1. Read `.codebuddy/workflow/state.yaml`
-2. 验证 `phase.current == "probe"` 且 `status == "pending"`（或 `in_progress` 时进入恢复模式）
-3. 设置 `phase.status = "in_progress"`，`phase.started_at = 当前时间`
-4. 更新 `session.last_activity = 当前时间`
+- parameters: current_phase="probe", next_phase="quality-gate"
 
 ### Step 1: 提取关键词
 
 从输入中提取探路关键词：BUG → 异常方法名/页面路由/报错信息/表名；需求 → 功能关键词/目标模块/页面。
 
+### Step 1.5: 加载工作流模式
+
+从 `state.yaml` 读取 `workflow.pattern`：
+- 不存在 → 默认 `distribute`
+- 存在 → 按该模式选择探路策略
+
+| 模式 | 探路策略 | 子 Agent 数 |
+|------|---------|:-----------:|
+| `classify` | 定向探路（仅相关层） | 2~3 |
+| `distribute` | 全覆盖探路（默认） | 4 |
+| `adversarial` | 全覆盖 + 额外安全/性能扫描 | 5 |
+| `generate` | 多角度探路（收集备选方案） | 3~4 |
+
+> 详细模式定义见 `references/dynamic-workflows-reference.md`。
+
+### Step 1.8: 检测可用 codegraph 服务
+
+探路前先检测项目 `.mcp.json` 中已注册的 codegraph 子项目服务，决定 Agent A 的分发策略：
+
+```bash
+# 读取 .mcp.json，提取所有已启用的 codegraph-* 服务名
+# 使用 jq 或 Grep 解析
+codegraph_services=$(jq -r '.mcpServers | to_entries[] 
+  | select(.key | startswith("codegraph-")) 
+  | select(.value.disabled == false) 
+  | .key' .mcp.json 2>/dev/null || echo "")
+```
+
+根据检测结果选择探路策略：
+
+| 检测结果 | 策略 | Agent A 分发 |
+|---------|------|-------------|
+| 无子项目服务 | 标准探路 | 使用 `codegraph`（全项目扫描） |
+| 1 个子项目服务 | 聚焦探路 | 使用 `codegraph-{子项目}` |
+| 2+ 个子项目服务 | 并行分发探路 | 每个子项目一个 Agent A-N |
+
+检测结果传入 `spawn-probe-agents.md` 的 `mcp_codegraph_services` 参数。
+
 ### Step 2: 并行子代理探路
 
-一次性发送 4 个 Agent 调用（`run_in_background: true`）。子代理的 `max_turns` 设置建议：
+Read `scripts/spawn-probe-agents.md` 并执行，根据 Step 1.8 检测结果启动探路子 Agent：
 
-| 子代理 | model | max_turns | 说明 |
-|--------|-------|-----------|------|
-| Agent A | `reasoning` | 20 | codegraph 调用链追踪 |
-| Agent B | `reasoning` | 25 | DB 查询 + VO/DTO 定位 + 数据采样 |
-| Agent C | `reasoning` | 20 | 影响范围 + 业务规则 |
-| Agent D | `lite` | 10 | 文档查阅 |
+- project_root: {项目根目录}
+- mcp_mysql_name: "mysql-{子项目名}"
+- mcp_codegraph_name: "codegraph"（默认）
+- mcp_codegraph_services: "{Step 1.8 检测到的子项目服务列表，逗号分隔}"
+- change_summary: "{本次变更概述}"
 
-> ⚠️ 注意：max_turns 包含 Agent 的思考和每次 MCP 工具调用的轮次（codegraph 的 `context`/`trace`/`impact` 各消耗 1-2 轮），不足会导致探路不完整。如超限，回退方案为手动探路（直接使用 Read/Grep/mysql/codegraph 逐个执行）。
-
-**Agent A: 代码结构探路** — codegraph 建立 L0-L3 调用链
-1. `codegraph_context(task, maxNodes=20, includeCode=true)` — 获取入口点 + 关联符号 + 关键代码
-2. `codegraph_node(symbol, includeCode=true)` — 补充调用链细节 [可选]
-3. `codegraph_trace(from=Controller, to=Mapper)` — 验证完整路径 [可选]
-
-**Agent B: 数据库结构 + 数据采样 + VO/DTO 数据视图 + 流转追踪** — 三层探路
-
-**B1: 表结构查询**
-1. `list_tables` — 确认表名
-2. `describe_table(table="{目标表名}")` — 获取字段/类型/备注/关联
-
-**B2: 真实数据采样** — 通过 API 接口获取，通过 VO/DTO 体现业务数据结构
-
-> 数据采样优先通过 **Controller 层 API 接口**获取，确保采样数据反映的是经过业务逻辑处理后的视图，而非原始表结构。使用 `api-fetcher` MCP 工具调用本地后端服务获取实时 JSON 响应。同时保留底层 DB 采样用于值域验证。
-
-**B2-1: API 接口数据获取**（涉及 DB 时必做，前置步骤）
-
-通过 `codegraph` 分析代码结构定位 VO/DTO 类，再通过 `api-fetcher` 调用实际 API 获取真实响应数据。
-
-**Step A — codegraph 定位（必须前置，确认 API 路径和 VO 结构）**
-1. `codegraph_context(task="{功能描述} 的 Controller 返回数据", maxNodes=20, includeCode=true)` — 定位目标 Controller 方法，获取其返回的 VO/DTO 类名和 `@RequestMapping` 路径
-2. `codegraph_node(symbol="{VO/DTO 类名}", includeCode=true)` — 获取 VO/DTO 完整的字段结构（字段名、类型、注解），记录到探路报告
-3. `codegraph_trace(from="{Controller 列表方法}", to="{Mapper}")` — 验证业务数据从 DB→Entity→VO/DTO 的完整映射链路
-4. 标注 **每个 VO/DTO 字段的赋值来源**（直接映射/枚举转换/字典翻译/计算派生/聚合统计）
-
-**Step B — api-fetcher 调用（可选，后端运行时可执行）**
-1. `api_login` — 获取 JWT token（通过 `.mcp.json` 中配置的登录方式；dev profile 走 `/sys/login` 免验证码，其他 profile 可加 `--use-mlogin`）
-2. `api_list path="/{Controller 基路径}/{list 端点}" params={pageNo:1, pageSize:3}` — 调用列表接口，返回 JSON 数据
-3. 对比 Step A 的 VO/DTO 字段结构与 API 实际返回的 field name/sample，**标注差异**（如 `@JsonIgnore` 字段未返回、null 字段输出差异、额外字段等）
-4. 如存在详情接口，使用 `api_get_by_id path="/{详情端点}" id="{上一步中的记录ID}"` 获取单条完整数据
-
-> 当后端服务未运行时，跳过 Step B，仅基于 codegraph 分析的 VO/DTO 结构进行探路（结果中标注"API 未验证"）。
-
-**B2-2: DB 真实数据采样**（`execute_query`，仅 SELECT，涉及 DB 时必做）
-1. `execute_query(query="SELECT * FROM {目标表} LIMIT 3")` — 正常流程数据行，对照 VO/DTO 字段验证字段映射关系
-2. `execute_query(query="SELECT DISTINCT {枚举/状态字段} FROM {目标表}")` — 枚举/字典值域覆盖
-3. `execute_query(query="SELECT * FROM {目标表} WHERE {条件} LIMIT 3")` — 边界案例数据（如状态=已删除、数值=0、日期=空），最多 2 个场景
-4. 对照 B2-1 的 VO/DTO 字段结构，标注 **每个表字段在 VO 中的映射关系**（字段名转换、类型转换、值域转换）
-
-> 约束见下方"约束"章节。
-
-**B3: 数据流转追踪**
-1. `codegraph_trace(from=Controller, to=Mapper)` — 验证写入数据的完整链路
-2. `codegraph_node("{写入Service方法}")` — 查看数据转换/计算逻辑
-3. 标注"谁写入→数据从哪来→经过哪些转换→VO/DTO 赋值→最终存到哪"
-
-**Agent C: 影响范围 + 业务规则**
-1. `codegraph_impact(symbol)` — 影响范围分析
-2. `codegraph_explore(query, maxFiles=8)` — 批量获取源码
-3. `codegraph_context(task="扫描 {模块} 业务逻辑模式")` — 识别 if/switch/枚举/权限等
-
-**Agent D: 查阅项目文档**
-1. Read `docs/INDEX.md` → 定位目录
-2. Read `docs/探路报告/INDEX.md` → 复用同类报告
-3. Read `docs/业务规则/{模块}` → 理解业务约束
-4. 查最近修改记录
+> 如果检测到多个 `codegraph-{子项目名}` 服务，Agent A 将按子项目并行分发（每个子项目一个子 Agent），大幅提升跨模块探路效率。
+> 如果任一 Agent 超限（max_turns 不足），回退方案为手动探路（直接使用 Read/Grep/mysql/codegraph 逐个执行，结果标注"手动探路"）。
 
 ### Step 3: 合并结果 → 生成探路报告
 
@@ -134,27 +122,23 @@ mcpServers: [mysql-{子项目名}, api-fetcher-{子项目名}]
 | **L5** 前端 API/组件 | API 文件 + 组件依赖清单（涉及前端时） | 按需 |
 | **测试数据样例** | 正常流程数据行 + 边界值覆盖 + 字典/枚举 DISTINCT + VO/DTO 字段映射对照（涉及 DB 时） | ✅ |
 | **影响范围** | codegraph_impact 分析结果 | 推荐 |
+| **API 响应样本** | 各 API 的响应结构摘要和样本文件，供 Phase 5.5 响应结构校验使用 | 推荐 |
 
 **报告不应包含**：修改建议、实施方案（Phase 3/4 的职责）。
 
-### Step 4: 更新探路报告索引
+**API 响应样本采集说明**：在探路过程中，使用 `api-fetcher` 调用本次涉及的各 API 接口，记录响应结构摘要并保存样本到 `docs/探路报告/samples/` 目录。每个接口一个样本文件，命名格式为 `{接口路径简写}.json`（如 `user-list.json`）。样本用于 Phase 5.5 响应结构校验时对比新旧接口行为。
 
-在 `docs/探路报告/INDEX.md` 表**顶部**插入新行（<!-- ↓↓↓ 新记录插入到下面这行下方，保持日期倒序 ↓↓↓ --> 下面），格式：
+### Step 4: 更新探路报告索引（Read `scripts/update-index.md`）
 
-```
-| {日期} | [{简述}](./{文件名}) | {一行摘要} |
-```
+执行 prepend 模式：
+- index_path: "docs/探路报告/INDEX.md"
+- row_content: "| {日期} | [{简述}](./{文件名}) | {一行摘要} |"
 
-### Step 5: 更新工作流状态（Phase 出口）
+### Step 5: 更新工作流状态（Phase 出口，Read `scripts/phase-entry-exit.md` 出口流程）
 
 1. 更新 `artifacts.probe_report.path = "docs/探路报告/{最新文件名}"`, `artifacts.probe_report.updated_at = 当前时间`
-2. Phase 出口：
-   - `phase.status = "completed"`, `phase.completed_at = 当前时间`
-   - `progress.phases_completed.append("probe")`
-   - `phase.current = "quality-gate"`, `phase.status = "pending"`
-   - `metrics_snapshot.phase_durations[probe] = 耗时分钟数`
-   - `metrics_snapshot.total_duration_min = 累加值`
-3. 更新 `session.last_activity = 当前时间`
+2. 参数: current_phase="probe", next_phase="quality-gate"
+3. 额外：`metrics_snapshot.total_duration_min = 累加值`
 
 ### ⚡ 探路前必查：全路径 + 封装层检测
 
@@ -177,6 +161,7 @@ mcpServers: [mysql-{子项目名}, api-fetcher-{子项目名}]
 
 - [ ] L0-L3 每步有文件:行号，调用链贯通
 - [ ] 使用了并行子代理（至少 codegraph + mysql）
+- [ ] 已检测 codegraph 服务并选择分发策略
 - [ ] 已查阅项目文档
 - [ ] 影响范围评估已包含
 - [ ] 不确定处标注"(待验证)"
@@ -187,6 +172,8 @@ mcpServers: [mysql-{子项目名}, api-fetcher-{子项目名}]
 - [ ] 涉及后端时已记录 VO/DTO 类名和字段结构（反映业务数据视图）
 - [ ] VO/DTO 字段赋值来源已标注（直接映射/枚举转换/字典翻译/计算派生/聚合统计）
 - [ ] 表字段与 VO 字段映射关系已记录
+- [ ] 探路报告已遵循 communication-rules 的 normal 级别
+- [ ] 探路过程交互已遵循 communication-rules 的 concise 级别
 
 ## 超限回退（子代理超限时使用）
 
@@ -205,3 +192,4 @@ mcpServers: [mysql-{子项目名}, api-fetcher-{子项目名}]
 - 绝不写代码或修改建议。精确行号。标注"(待验证)"。
 - `execute_query` 仅允许 SELECT 语句，严禁 DML（INSERT/UPDATE/DELETE）。
 - 边界条件采样最多 2 个场景，避免过度查询。
+- **沟通规则**：探路报告使用 **normal 级别**（完整句、文档级可读性）；探路过程中的交互使用 **concise 级别**。详见 `references/communication-rules.md`。

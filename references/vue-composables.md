@@ -1,5 +1,15 @@
 # Vue 3 Composables 最佳实践
 
+## 快速参考
+
+| 规范 | 说明 |
+|------|------|
+| 命名 | `use{Feature}.ts` |
+| 输入参数 | 支持 `MaybeRef<T>` / `MaybeRefOrGetter<T>` |
+| 返回 | 按字母序，`ref` + 函数 |
+| 副作用 | 在 composable 内统一处理 |
+| 外部只读 | 返回 `readonly(data)` 而非裸 `data` |
+
 ## 定义
 
 Composable 是一个利用 Vue Composition API 封装**有状态逻辑**的函数。

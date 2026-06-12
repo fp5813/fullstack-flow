@@ -15,6 +15,16 @@ user-invocable: true
 
 > 当项目新增子项目（新的 Spring Boot 应用）时，使用本子技能初始化 MCP 服务和 fullstack-flow 配置适配。
 
+## 快速概览
+
+```
+创建 MCP 服务配置（codegraph/mysql/api-fetcher）
+  → 配置 MCP 服务名模式 → 适配 fullstack-flow 引用
+  → 验证配置生效 → 完成
+```
+
+**核心**: 为新子项目创建 MCP 配置 + 更新 fullstack-flow 子项目引用
+
 ## 输入参数
 
 | 参数 | 说明 | 示例 |
@@ -148,5 +158,6 @@ user-invocable: true
 
 - [MCP 配置文件]（`{project-root}/.mcp.json`）
 - [MCP 工具汇总]（`.codebuddy/skills/fullstack-flow/references/mcp-tools-summary.md`）
+- [通用 MCP 配置模板]（`../references/mcp-project-templates/GENERIC.md`）— 推荐新项目阅读
 - [codegraph-wrapper.js]（`{mcp-servers-path}/codegraph-wrapper.js`）
 - [api-fetcher]（`{mcp-servers-path}/api-fetcher/`）

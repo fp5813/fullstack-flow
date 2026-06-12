@@ -11,7 +11,16 @@ user-invocable: false
 
 # 代码探路
 
-自动提取关键词进行只读代码分析。
+> 只读分析 BUG 或需求，使用 codegraph + mysql 调查代码结构、调用链、数据库表结构。
+
+## 快速概览
+
+```
+提取关键词 → 并行启动 4 子代理（代码/DB/影响/文档）
+  → 汇总探路结果 → 输出结构化报告
+```
+
+**核心**: MCP 工具链（codegraph）只读分析 / 并行子代理 / 三层数据采样
 
 ## 关键词提取策略
 
@@ -28,11 +37,14 @@ user-invocable: false
 
 ## 并行探路流程
 
-> ⭐ **推荐**：使用 Agent 工具并行启动 4 个子代理，分别执行不同探路任务，然后合并结果。
+> ⭐ **推荐**：使用 Agent 工具并行启动探路子 Agent。Agent A 按检测到的子项目 codegraph 服务自动分发，提升跨模块探路效率。
 
 ```
-Main Agent (提取关键词)
-  ├── Agent A: 代码结构 → codegraph_context + codegraph_node + codegraph_trace
+Main Agent (提取关键词 + 检测 codegraph 服务)
+  ├── 检测 .mcp.json 中的 codegraph-{子项目名} 服务
+  ├── 0 个 → Agent A: 代码结构（全项目 codegraph）
+  ├── 1 个 → Agent A: 代码结构（聚焦 codegraph-{子项目}）
+  ├── 2+ 个 → Agent A-1: 子项目1 / Agent A-2: 子项目2 / ...
   ├── Agent B: 数据库结构 → mysql-{子项目名} describe_table
   ├── Agent C: 影响分析 → codegraph_impact + codegraph_explore
   └── Agent D: 项目文档 → Read docs/INDEX.md + 探路报告/业务规则/修改记录
@@ -40,7 +52,15 @@ Main Agent (提取关键词)
 Main Agent (合并结果)
 ```
 
-### Agent A: 代码结构探路
+### Agent A: 代码结构探路（自动分发）
+
+根据项目 `.mcp.json` 中注册的 codegraph 服务自动选择：
+
+| 检测结果 | 使用的 codegraph 服务 | 说明 |
+|---------|---------------------|------|
+| 无子项目服务 | `codegraph`（全项目） | 标准探路 |
+| 1 个子项目服务 | `codegraph-{子项目名}` | 聚焦单个模块 |
+| 2+ 个子项目服务 | 每个子项目一个 Agent A-N | 并行扫描互不干扰 |
 
 ```
 1. codegraph_context(task="{BUG/功能描述}", maxNodes=20, includeCode=true)
@@ -91,7 +111,7 @@ Main Agent (合并结果)
 
 ## 串行探路流程（备选）
 
-当并行子代理不合适时（如简单问题），也可以串行执行：
+当并行子代理不合适时（如简单问题），也可以串行执行。串行时使用 `codegraph` 全项目服务：
 
 ```
 1. codegraph_context(task="{描述}", includeCode=true)     ← 首要工具

@@ -1,5 +1,15 @@
 # Vue 3 前端测试最佳实践
 
+## 快速参考
+
+| 测试类型 | 工具 | 文件命名 |
+|---------|------|---------|
+| 组件测试 | Vitest + Vue Test Utils | `__tests__/Comp.spec.ts` |
+| Composable 测试 | Vitest（直接调用） | `__tests__/useXxx.spec.ts` |
+| E2E | Playwright | `e2e/*.spec.ts` |
+
+**运行命令**: `npx vitest run`（CI） / `npx vitest`（watch 模式）
+
 ## 技术栈
 
 | 工具 | 用途 | 安装 |

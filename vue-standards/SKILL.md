@@ -9,6 +9,16 @@ user-invocable: false
 > 本规范基于 vuejs-ai/skills 社区最佳实践，适用于 Vue 3 + Composition API + TypeScript + `<script setup lang="ts">` 项目。
 > 具体项目的 UI 框架（Element Plus / Ant Design Vue 等）和 API 风格（defHttp / axios 等）从 `CODEBUDDY.md` 获取。
 
+## 快速概览
+
+| 章节 | 内容 | 加载时机 |
+|------|------|---------|
+| 1. 核心架构约定 | 技术栈 / 组件拆分 | Phase 4 |
+| 2. 核心编码规范 | Reactivity / SFC / 数据流 / Composables / API | Phase 5 FE |
+| 3. 性能优化 | 后置优化原则 | Phase 5 |
+| 4. 前端 TDD 测试 | Red→Green→Refactor / Vitest | Phase 5 FE 必读 |
+| 5. 审查清单 | 6 类 22 项检查 | Phase 5.5 FE |
+
 ---
 
 ## 1. 核心架构约定
@@ -206,7 +216,9 @@ export function fetchOrderDetail(orderNo: string) {
 
 ---
 
-## 4. 前端测试规范
+## 4. 前端 TDD 测试规范
+
+> 遵循 Red → Green → Refactor 三阶段流程。测试先于代码编写，测试定义契约，代码使其通过。
 
 ### 4.1 技术栈
 
@@ -214,25 +226,30 @@ export function fetchOrderDetail(orderNo: string) {
 |------|------|
 | Vitest | 测试运行器（兼容 Vite 配置） |
 | Vue Test Utils | 组件挂载和交互 |
-| @vue/test-utils | 官方测试工具库 |
 | jsdom | DOM 环境模拟 |
 
-### 4.2 组件测试
+### 4.2 TDD 三阶段流程
+
+#### 阶段一 Red: 先写测试
+
+编码开始前，为每个组件/composable 创建对应的测试文件：
 
 ```typescript
+// __tests__/OrderList.spec.ts
 import { mount } from '@vue/test-utils';
 import { describe, it, expect } from 'vitest';
-import OrderList from './OrderList.vue';
+import OrderList from '../OrderList.vue';
 
 describe('OrderList', () => {
-  it('should render items', () => {
+  // Red: 先定义期望行为，此时代码尚未实现
+  it('should render items when provided [AC01]', async () => {
     const wrapper = mount(OrderList, {
       props: { items: [{ id: '1', name: 'Test' }] },
     });
     expect(wrapper.text()).toContain('Test');
   });
 
-  it('should emit select when clicked', async () => {
+  it('should emit select when clicked [AC02]', async () => {
     const wrapper = mount(OrderList, {
       props: { items: [{ id: '1', name: 'Test' }] },
     });
@@ -242,28 +259,81 @@ describe('OrderList', () => {
 });
 ```
 
-### 4.3 Composable 测试
-
-```typescript
-import { renderComposable } from '@vue/test-utils';
-import { useFeature } from './useFeature';
-
-describe('useFeature', () => {
-  it('should fetch data', async () => {
-    const { data, fetch } = useFeature('test');
-    await fetch();
-    expect(data.value).toHaveLength(3);
-  });
-});
+**Red 验证**：运行测试确认失败（预期行为）：
+```bash
+npx vitest run __tests__/OrderList.spec.ts
+# 输出: FAIL  - expected "Test" but received ""
 ```
 
-### 4.4 命名规范
+#### 阶段二 Green: 实现组件使测试通过
+
+根据测试定义的契约实现组件代码：
+
+```vue
+<script setup lang="ts">
+defineProps<{ items: { id: string; name: string }[] }>();
+const emit = defineEmits<{ (e: 'select', id: string): void }>();
+</script>
+
+<template>
+  <div v-for="item in items" :key="item.id" class="item" @click="emit('select', item.id)">
+    {{ item.name }}
+  </div>
+</template>
+```
+
+**Green 验证**：确认测试全部通过。
+```bash
+npx vitest run __tests__/OrderList.spec.ts
+# 输出: PASS
+```
+
+#### 阶段三 Refactor: 保持测试通过的前提下重构
+
+```typescript
+// 重构后再次运行 → 仍应 PASS
+npx vitest run
+```
+
+### 4.2 测试文件组织 & 命名规范
+
+**文件结构**（测试与源文件同目录）：
+
+```
+src/
+├── components/
+│   ├── OrderList.vue
+│   └── __tests__/
+│       └── OrderList.spec.ts       ← 与组件同目录
+├── composables/
+│   ├── useFeature.ts
+│   └── __tests__/
+│       └── useFeature.spec.ts      ← 与 composable 同目录
+├── views/order/
+│   ├── OrderPage.vue
+│   └── __tests__/
+│           └── OrderPage.spec.ts   ← 与视图同目录
+```
+
+**命名规范**：
 
 | 测试类型 | 命名模式 | 示例 |
 |---------|---------|------|
-| 组件测试 | `should_xxx_when_yyy` | `should_render_items_when_provided` |
-| Composable 测试 | `should_xxx_with_yyy` | `should_fetch_data_with_valid_input` |
-| 交互测试 | `should_emit_xxx_when_yyy` | `should_emit_select_when_clicked` |
+| 组件测试 | `should_xxx_when_yyy [AC-N]` | `should_render_items_when_provided [AC01]` |
+| Composable 测试 | `should_xxx_with_yyy [AC-N]` | `should_fetch_data_with_valid_input [AC03]` |
+| 交互测试 | `should_emit_xxx_when_yyy [AC-N]` | `should_emit_select_when_clicked [AC02]` |
+
+### 4.3 TDD 约束
+
+| 规则 | 说明 |
+|------|------|
+| 测试先于代码 | 未写测试前不写实现代码 |
+| 一次只测一个行为 | 每个 `it()` 只验证一个行为 |
+| 测试关联 AC | 测试名称标注 `[AC-N]` 编号，关联规格文档 |
+| 运行确认失败 | Red 阶段必须运行 `npx vitest run` 确认预期失败 |
+| 不跳过失败测试 | 禁用 `it.skip` / `describe.skip` |
+| 重构不改测试 | Refactor 阶段只改实现代码，不改测试（除非 AC 变更） |
+| 运行命令 | `npx vitest run`（CI） / `npx vitest`（watch 模式） |
 
 ---
 
@@ -284,6 +354,8 @@ describe('useFeature', () => {
 - [ ] `v-model` 仅用于真正的双向组件
 - [ ] `provide/inject` 配合 `InjectionKey`
 - [ ] API 错误处理完整
+- [ ] API 响应数据字段有 null 保护（默认值兜底），不假设后端字段非空（参考 FC-006）
+- [ ] 兜底/空状态能区分不同异常场景来源，保留诊断信息（参考 FC-007）
 
 ### 5.4 模板
 - [ ] `v-for` 有 `:key`（唯一 id）
@@ -296,7 +368,14 @@ describe('useFeature', () => {
 - [ ] TypeScript 类型完整（无 `any` 逃避）
 - [ ] `api/` 目录下请求函数类型显式声明
 
-### 5.6 性能与文档
+### 5.6 TDD & 测试覆盖
+- [ ] 测试先于代码编写（Red）
+- [ ] 测试关联规格 AC 编号
+- [ ] Red 阶段运行确认失败（无假阳性）
+- [ ] 无 `it.skip` / `describe.skip`
+- [ ] `npx vitest run` 全部通过
+
+### 5.7 性能与文档
 - [ ] 性能优化仅在核心逻辑验证后引入
 - [ ] `@Operation` / JSDoc 注释完整（新增 API 必加）
 - [ ] `@AsyncLog` 操作日志完整（写操作必加）

@@ -1,10 +1,17 @@
 ---
-name: fullstack-flow/java-standards
-description: "Java 后端开发规范（fullstack-flow 子技能）— Spring Boot 后端规范 + JUnit 测试 + 后端代码审查清单，通过 CODEBUDDY.md 适配本地项目架构。Agent BE 在 Phase 5/5.5 时必需加载。"
+name: fullstack-flow/java-dev-standards
+description: "Java 后端开发规范（fullstack-flow 子技能）— Spring Boot 分层架构、编码规范、异常处理、日志规范、配置管理。Agent BE 在 Phase 5 时必需加载。"
 user-invocable: false
 ---
 
-# Java 开发规范
+# Java 后端开发规范
+
+## 快速参考
+
+| 规范 | 内容 | 适用 Phase |
+|------|------|:----------:|
+| 后端架构 | Spring Boot 分层 + 目录结构 | Phase 4 |
+| 编码规范 | 命名/API 风格/事务/异常 | Phase 5 BE |
 
 > **通用层**：本规范与项目无关，适用于任何 Spring Boot 项目。
 > **本地化层**：项目特定约定（包名、API 前缀、数据源等）通过 `CODEBUDDY.md` 注入。
@@ -304,193 +311,14 @@ log.info("{domain}.{action}.success key1={} costMs={}", val1, elapsed(start));
 
 ---
 
-## 2. JUnit 测试规范
-
-### 2.1 目录结构
-
-```
-src/test/
-├── java/com/{project}/
-│   ├── controller/       ← MockMvc 测试
-│   ├── service/          ← Service 单元测试
-│   ├── repository/       ← 数据访问测试（@DataJpaTest / MyBatis-Plus）
-│   └── {project}ApplicationTests.java  ← 启动上下文测试
-└── resources/
-    └── application-test.yml  ← 测试配置
-```
-
-### 2.2 单元测试（JUnit 5 + Mockito）
-
-```java
-@ExtendWith(MockitoExtension.class)
-class SomeServiceTest {
-
-    @Mock
-    private SomeMapper someMapper;
-
-    @InjectMocks
-    private SomeServiceImpl someService;
-
-    @Test
-    void should_return_data_when_query_exist() {
-        // given
-        given(someMapper.selectById(1L)).willReturn(createMockEntity());
-
-        // when
-        Entity result = someService.get(1L);
-
-        // then
-        assertThat(result).isNotNull();
-        assertThat(result.getId()).isEqualTo(1L);
-    }
-
-    @Test
-    void should_throw_when_data_not_found() {
-        // given
-        given(someMapper.selectById(99L)).willReturn(null);
-
-        // when & then
-        assertThrows(BusinessServiceException.class,
-                () -> someService.get(99L));
-    }
-}
-```
-
-### 2.3 集成测试（Spring Boot + Testcontainers）
-
-```java
-@SpringBootTest
-@Testcontainers
-class SomeServiceIntegrationTest {
-
-    @Container
-    static MySQLContainer<?> mysql = new MySQLContainer<>("mysql:8.0")
-            .withDatabaseName("testdb")
-            .withUsername("test")
-            .withPassword("test");
-
-    @DynamicPropertySource
-    static void configureProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", mysql::getJdbcUrl);
-        registry.add("spring.datasource.username", mysql::getUsername);
-        registry.add("spring.datasource.password", mysql::getPassword);
-    }
-
-    @Autowired
-    private SomeService someService;
-
-    @Test
-    void should_create_and_query() {
-        // 集成测试：真实数据库
-    }
-}
-```
-
-### 2.4 Controller 测试（MockMvc）
-
-```java
-@SpringBootTest
-@AutoConfigureMockMvc
-class SomeControllerTest {
-
-    @Autowired
-    private MockMvc mockMvc;
-
-    @MockitoBean
-    private SomeService someService;
-
-    @Test
-    void should_return_page() throws Exception {
-        // given
-        given(someService.page(any())).willReturn(new Page<>());
-
-        // when & then
-        mockMvc.perform(post("/api/auth/some/page")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.statusCode").value("0"));
-    }
-}
-```
-
-> **注意**：`@MockitoBean` 是 Spring Boot 3.4+ / Testcontainers 的替代方案，
-> 旧版本使用 `@MockBean`。检查 `CODEBUDDY.md` 确认项目 Spring Boot 版本。
-
-### 2.5 命名规范
-
-| 测试类型 | 方法命名 | 示例 |
-|---------|---------|------|
-| 单元测试 | `should_xxx_when_yyy` | `should_return_data_when_query_exist` |
-| 集成测试 | `should_xxx_with_yyy` | `should_create_order_with_valid_request` |
-| Controller | `should_return_xxx_when_yyy` | `should_return_400_when_param_invalid` |
-
-### 2.6 覆盖率要求
-
-| 层级 | 覆盖率要求 | 说明 |
-|------|-----------|------|
-| Service | ≥ 80% | 核心业务逻辑 |
-| Controller | ≥ 60% | 路径覆盖+参数校验 |
-| Entity | — | 自动覆盖 |
-| 异常路径 | 100% | 每类异常至少 1 条 |
-
----
-
-## 3. 代码审查清单
-
-### 3.1 后端审查
-
-- [ ] `@Transactional(rollbackFor = Exception.class)` — 默认只回滚 RuntimeException
-- [ ] `BusinessServiceException` 替代 `RuntimeException` 抛出业务异常
-- [ ] 写操作有 `@AsyncLog` 操作日志注解
-- [ ] 每个接口有开始/成功/耗时日志（`log.info`）
-- [ ] 构造器注入，没有 `@Autowired` 字段注入
-- [ ] 参数校验：`@Valid` / `@NotBlank` / `@NotNull` 完整
-- [ ] `BaseResult<T>` 统一返回（不用 `Map` / `String` 裸返回）
-- [ ] `@RequestMapping` 路径与模块一致（参考 `CODEBUDDY.md`）
-
-### 3.2 安全审查
-
-- [ ] 新增接口有权限注解（`@RequiresPermissions` / Shiro / Spring Security）
-- [ ] MyBatis XML 中 `#{}` 替换 `${}`（防 SQL 注入）
-- [ ] 用户 ID 从上下文中获取（`UserContext`），不从请求参数接收
-- [ ] 敏感字段脱敏（密码、手机号、身份证）
-- [ ] 文件上传限制类型和大小
-
-### 3.3 API 设计审查
-
-- [ ] 分页接口使用统一 `PageParam<T>` 包装参数
-- [ ] 响应体使用 DTO/VO（不直接暴露 Entity）
-- [ ] `@Operation(summary = "xxx")` 描述完整
-- [ ] 向前兼容：新增字段不影响旧客户端
-- [ ] 枚举值返回 code + name（不要裸 code）
-
-### 3.4 性能审查
-
-- [ ] N+1 查询检测：循环内查数据库 → 改为批量查询
-- [ ] 分页使用 MyBatis-Plus `Page` 对象
-- [ ] 批量操作使用批量方法（`saveBatch` / `updateBatchById`）
-- [ ] 大表查询有索引
-- [ ] Feign 调用设置超时
-
-### 3.5 文档审查
-
-- [ ] Controller `@Tag` + `@Operation` 注解完整
-- [ ] Entity 字段 `@Schema(description = "xxx")` 完整
-- [ ] `CODEBUDDY.md` 中的项目约定全部遵循
-
----
-
-## 4. 自检清单
+## 2. 自检清单
 
 - [ ] Controller 注解模板与实际项目一致
-- [ ] Service 继承链正确（`Service` → `ServiceImpl<Mapper, Entity>`
+- [ ] Service 继承链正确（`Service` → `ServiceImpl<Mapper, Entity>`）
 - [ ] Entity 注解完整（`@TableName` + `@TableId` + `@TableField`）
 - [ ] 异常处理引用 `BusinessServiceException` + 错误码枚举
-- [ ] 测试引用 Testcontainers + Spring Boot Test
-- [ ] 审查清单已逐项勾选
 
 ---
 
 > **使用方式**：Phase 5 时与 `CODEBUDDY.md` 一起加载，合并项目特定约定生成代码。
-> Phase 5.5 时按第 3 章审查清单逐项审核。
+> **代码审查**：Phase 5.5 时加载 `java-review-standards` 子技能查看审查清单。
